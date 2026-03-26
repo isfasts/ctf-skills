@@ -7,7 +7,6 @@
 - [Prefix Hash Brute-Force (Nullcon 2026)](#prefix-hash-brute-force-nullcon-2026)
 - [CVP/LLL Lattice for Constrained Integer Validation (HTB ShadowLabyrinth)](#cvplll-lattice-for-constrained-integer-validation-htb-shadowlabyrinth)
 - [Decision Tree Function Obfuscation (HTB WonderSMS)](#decision-tree-function-obfuscation-htb-wondersms)
-- [GLSL Shader VM with Self-Modifying Code (ApoorvCTF 2026)](#glsl-shader-vm-with-self-modifying-code-apoorvctf-2026)
 - [GF(2^8) Gaussian Elimination for Flag Recovery (ApoorvCTF 2026)](#gf28-gaussian-elimination-for-flag-recovery-apoorvctf-2026)
 - [Z3 for Single-Line Python Boolean Circuit (BearCatCTF 2026)](#z3-for-single-line-python-boolean-circuit-bearcatctf-2026)
 - [Sliding Window Popcount Differential Propagation (BearCatCTF 2026)](#sliding-window-popcount-differential-propagation-bearcatctf-2026)
@@ -294,56 +293,6 @@ for func in fm.getFunctions(True):
 
 ---
 
-## GLSL Shader VM with Self-Modifying Code (ApoorvCTF 2026)
-
-**Pattern (Draw Me):** A WebGL2 fragment shader implements a Turing-complete VM on a 256x256 RGBA texture. The texture is both program memory and display output.
-
-**Texture layout:**
-- **Row 0:** Registers (pixel 0 = instruction pointer, pixels 1-32 = general purpose)
-- **Rows 1-127:** Program memory (RGBA = opcode, arg1, arg2, arg3)
-- **Rows 128-255:** VRAM (display output)
-
-**Opcodes:** NOP(0), SET(1), ADD(2), SUB(3), XOR(4), JMP(5), JNZ(6), VRAM-write(7), STORE(8), LOAD(9). 16 steps per frame.
-
-**Self-modifying code:** Phase 1 (decryption) uses STORE opcode to XOR-patch program memory that Phase 2 (drawing) then executes. The decryption overwrites SET instructions with correct pixel color values before the drawing code runs.
-
-**Why GPU rendering fails:** The GPU runs all pixels in parallel per frame, but the shader tracks only ONE write target per pixel per frame. With multiple VRAM writes per frame, only the last survives — losing 75%+ of pixels. Similarly, STORE patches conflict during parallel decryption.
-
-**Solve via sequential emulation:**
-```python
-from PIL import Image
-import numpy as np
-
-img = Image.open('program.png').convert('RGBA')
-state = np.array(img, dtype=np.int32).copy()
-regs = [0] * 33
-
-# Phase 1: Trace decryption — apply all STORE patches sequentially
-x, y = start_x, start_y
-while True:
-    r, g, b, a = state[y][x]
-    opcode = int(r)
-    if opcode == 1: regs[g] = b & 255           # SET
-    elif opcode == 4: regs[g] = regs[b] ^ regs[a]  # XOR
-    elif opcode == 8:                              # STORE — patches program memory
-        tx, ty = regs[g], regs[b]
-        state[ty][tx] = [regs[a], regs[a+1], regs[a+2], regs[a+3]]
-    elif opcode == 5: break                        # JMP to drawing phase
-    x += 1
-    if x > 255: x, y = 0, y + 1
-
-# Phase 2: Execute drawing code — all VRAM writes preserved
-vram = np.zeros((128, 256), dtype=np.uint8)
-# ... trace with opcode 7 writing to vram[ty][tx] = color
-Image.fromarray(vram, mode='L').save('output.png')
-```
-
-**Key insight:** GLSL shaders are Turing-complete but GPU parallelism causes write conflicts. Self-modifying code (STORE patches) compounds the problem — patches from parallel executions overwrite each other. Sequential emulation in Python recovers the full output. The program.png file IS the bytecode.
-
-**Detection:** WebGL/shader challenge with a PNG "program" file, challenge says "nothing renders" or output is garbled. Look for custom opcode tables in GLSL source.
-
----
-
 ## GF(2^8) Gaussian Elimination for Flag Recovery (ApoorvCTF 2026)
 
 **Pattern (Forge):** Stripped binary performs Gaussian elimination over GF(2^8) (Galois Field with 256 elements, using the AES polynomial). A matrix and augmentation vector are embedded in `.rodata`. The solution vector is the flag.
@@ -401,6 +350,11 @@ flag = bytes(aug[i][N] for i in range(N))
 **Detection:** Binary with a large matrix in `.rodata` (N² bytes), XOR-based row operations, constants `0x1b` or `0x11b`, and flag length matching sqrt of matrix size.
 
 ---
+
+See also: [patterns-ctf.md](patterns-ctf.md) for Part 1, [patterns-ctf-3.md](patterns-ctf-3.md) for Part 3 (Burrows-Wheeler transform inversion, OpenType font ligature exploitation, GLSL shader VM with self-modifying code).
+
+---
+
 
 ## Z3 for Single-Line Python Boolean Circuit (BearCatCTF 2026)
 
@@ -482,8 +436,6 @@ for start_val in range(0x10000):
 **Key insight:** Sliding window popcount differences create a recurrence relation: each new bit is determined by the bit 16 positions back plus the popcount delta. Only the first 16 bits are free (constrained by initial popcount). Brute-force the ~4000-8000 valid initial windows — for each, the entire bit sequence is deterministic. Runs in under a second.
 
 **Detection:** Binary computing popcount/hamming weight on fixed-size windows. Expected value array with length ≈ input_bits - window_size + 1. Values in array are small integers (0 to window_size).
-
----
 
 ---
 
@@ -635,8 +587,6 @@ int solve_block(uint32_t old_key, uint32_t expected_key, unsigned char *out) {
 
 ---
 
----
-
 ## ROP Chain Obfuscation in Modified Binary (PlaidCTF 2016)
 
 **Pattern (quite quixotic quest):** Modified `curl` binary with a custom `--pctfkey KEY` option. Key validation replaces `esp` with a buffer address and returns into a ~250KB ROP chain stored in a `magic_buf` symbol. The ROP chain validates the key through XOR, MD5, and constant comparisons.
@@ -687,4 +637,4 @@ flag = bytes(v ^ md5_key[i % 16] for i, v in enumerate(embedded_values))
 
 **Key insight:** ROP chain obfuscation ("ROPfuscation") hides algorithms in chains of return-oriented gadgets. The chain looks incomprehensible as raw addresses but becomes analyzable when you: (a) dump each gadget's disassembly, (b) filter repetitions and skip regions, (c) annotate register effects. The chain is functionally equivalent to normal code — it just uses `ret` instead of sequential execution. Large chains (100K+ gadgets) often contain unrolled loops that compress to ~1000 lines of pseudocode.
 
-See also: [patterns-ctf.md](patterns-ctf.md) for Part 1 (hidden emulator opcodes, SPN static extraction, image XOR smoothness, byte-at-a-time cipher, mathematical convergence bitmap, Windows PE XOR bitmap OCR, two-stage RC4+VM loaders, GBA ROM meet-in-the-middle, Sprague-Grundy game theory, kernel module maze solving, multi-threaded VM channels).
+See also: [patterns-ctf.md](patterns-ctf.md) for Part 1 (hidden emulator opcodes, SPN static extraction, image XOR smoothness, byte-at-a-time cipher, mathematical convergence bitmap, Windows PE XOR bitmap OCR, two-stage RC4+VM loaders, GBA ROM meet-in-the-middle, Sprague-Grundy game theory, kernel module maze solving, multi-threaded VM channels). [patterns-ctf-3.md](patterns-ctf-3.md) for Part 3 (Burrows-Wheeler transform inversion, OpenType font ligature exploitation, GLSL shader VM with self-modifying code).

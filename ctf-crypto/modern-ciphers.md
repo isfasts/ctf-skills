@@ -20,6 +20,8 @@ Block cipher attacks, MAC forgery, padding oracles, and authenticated encryption
 - [Birthday Attack / Meet-in-the-Middle](#birthday-attack--meet-in-the-middle)
 - [CRC32 Collision-Based Signature Forgery (iCTF 2013)](#crc32-collision-based-signature-forgery-ictf-2013)
 
+See also [modern-ciphers-2.md](modern-ciphers-2.md) for CRC32 forgery, Blum-Goldwasser, hash length extension, compression oracle, hash time reversal, OFB invertible RNG, weak key derivation, HMAC-CRC, DES weak keys, SRP bypass, modified AES S-Box, square attack, AES-ECB byte-at-a-time, AES-ECB cut-and-paste, AES-CBC IV bit-flip, Rabin LSB parity oracle, PBKDF2 pre-hash bypass, MD5 multi-collision, custom hash state reversal, and CRC32 brute-force.
+
 ---
 
 ## AES-CFB-8 Static IV State Forging

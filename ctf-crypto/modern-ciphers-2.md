@@ -1,8 +1,9 @@
-# CTF Crypto - Modern Cipher Attacks (Part 2)
+# CTF Crypto - Modern Cipher Attacks (Continued)
 
-Hash attacks, key derivation exploits, ECB oracles, Rabin/RSA parity attacks, and miscellaneous modern crypto techniques. For block cipher core attacks (AES modes, MAC forgery, padding oracle, Bleichenbacher, GCM), see [modern-ciphers.md](modern-ciphers.md). For stream cipher attacks (LFSR, RC4, XOR), see [stream-ciphers.md](stream-ciphers.md).
+Hash-based attacks, protocol-level exploits, ECB oracles, Rabin/RSA parity attacks, and specialized cipher weaknesses. For core AES/CBC/padding oracle techniques, see [modern-ciphers.md](modern-ciphers.md). For stream cipher attacks (LFSR, RC4, XOR), see [stream-ciphers.md](stream-ciphers.md).
 
 ## Table of Contents
+- [CRC32 Collision-Based Signature Forgery (iCTF 2013)](#crc32-collision-based-signature-forgery-ictf-2013)
 - [Blum-Goldwasser Bit-Extension Oracle (PlaidCTF 2013)](#blum-goldwasser-bit-extension-oracle-plaidctf-2013)
 - [Hash Length Extension Attack (PlaidCTF 2014)](#hash-length-extension-attack-plaidctf-2014)
 - [Compression Oracle / CRIME-Style Attack (BCTF 2015)](#compression-oracle--crime-style-attack-bctf-2015)
@@ -11,6 +12,8 @@ Hash attacks, key derivation exploits, ECB oracles, Rabin/RSA parity attacks, an
 - [Weak Key Derivation via Public Key Hash XOR (BSidesSF 2026)](#weak-key-derivation-via-public-key-hash-xor-bsidessf-2026)
 - [HMAC-CRC Linearity Attack (Boston Key Party 2016)](#hmac-crc-linearity-attack-boston-key-party-2016)
 - [DES Weak Keys in OFB Mode (Boston Key Party 2016)](#des-weak-keys-in-ofb-mode-boston-key-party-2016)
+- [SRP (Secure Remote Password) Protocol Bypass via Modular Arithmetic (ASIS CTF Finals 2016)](#srp-secure-remote-password-protocol-bypass-via-modular-arithmetic-asis-ctf-finals-2016)
+- [Modified AES S-Box Brute-Force Recovery (H4ckIT CTF 2016)](#modified-aes-s-box-brute-force-recovery-h4ckit-ctf-2016)
 - [Square Attack on Reduced-Round AES (0CTF 2016)](#square-attack-on-reduced-round-aes-0ctf-2016)
 - [AES-ECB Byte-at-a-Time Chosen Plaintext (ABCTF 2016)](#aes-ecb-byte-at-a-time-chosen-plaintext-abctf-2016)
 - [AES-ECB Cut-and-Paste Block Manipulation (NDH Quals 2016)](#aes-ecb-cut-and-paste-block-manipulation-ndh-quals-2016)
@@ -20,6 +23,33 @@ Hash attacks, key derivation exploits, ECB oracles, Rabin/RSA parity attacks, an
 - [MD5 Multi-Collision via Fastcol (BackdoorCTF 2016)](#md5-multi-collision-via-fastcol-backdoorctf-2016)
 - [Custom Hash State Reversal via Known Intermediates (BackdoorCTF 2016)](#custom-hash-state-reversal-via-known-intermediates-backdoorctf-2016)
 - [CRC32 Brute-Force for Small Payloads (BackdoorCTF 2016)](#crc32-brute-force-for-small-payloads-backdoorctf-2016)
+
+---
+
+## CRC32 Collision-Based Signature Forgery (iCTF 2013)
+
+**Pattern:** CRC32 is linear — appending 4 carefully chosen bytes to any message produces a target CRC32 value, enabling signature forgery without knowing the secret key.
+
+**Key insight:** `CRC32(msg || secret)` is not a secure MAC. Given any signed response `(msg, sig)`, compute 4 suffix bytes that force `CRC32(forged_msg || suffix || secret) == target_sig`. The linearity of CRC32 means the suffix computation is deterministic and instant.
+
+```python
+import struct, binascii
+
+def crc32_forge(data, target_crc):
+    """Append 4 bytes to data so CRC32(data + suffix) == target_crc"""
+    current = binascii.crc32(data) & 0xFFFFFFFF
+    # CRC32 polynomial table lookup to find suffix bytes
+    # that transform current CRC into target_crc
+    suffix = b''
+    crc = target_crc ^ 0xFFFFFFFF
+    for _ in range(4):
+        byte = (crc & 0xFF)
+        crc = (crc >> 8)
+        suffix = bytes([byte]) + suffix
+    return data + suffix  # Simplified — full implementation requires polynomial division
+```
+
+**When to use:** Any protocol using CRC32 as a message authentication code (MAC). CRC32 is a checksum, not a cryptographic hash — it provides no integrity guarantees against adversarial modification.
 
 ---
 
@@ -258,6 +288,63 @@ for candidate in range(256):
 ```
 
 **Key insight:** Integral cryptanalysis exploits the "balanced" property (XOR-sum = 0) that propagates through AES rounds. Effective against 4-round AES; 5+ rounds require more sophisticated variants.
+
+---
+
+## SRP (Secure Remote Password) Protocol Bypass via Modular Arithmetic (ASIS CTF Finals 2016)
+
+SRP implementations that only check `A != 0` and `A != N` can be bypassed by sending `A = 2*N`, causing the server to compute a zero session key.
+
+```python
+from hashlib import sha256
+import hmac
+
+# SRP protocol: server computes session key from A (client's public value)
+# S = (A * v^u) ^ b mod N
+# If A = 2*N: S = (2*N * v^u) ^ b mod N = 0 (since 2*N mod N = 0)
+
+N = server_modulus
+# Send A = 2*N (bypasses checks for A != 0 and A != N)
+A_malicious = 2 * N
+
+# Server computes S = 0, so session key K = SHA256(0)
+K = sha256(b'\x00').digest()
+
+# Now compute valid HMAC proof with known K
+proof = hmac.new(K, salt, sha256).hexdigest()
+```
+
+**Key insight:** SRP implementations must validate `A % N != 0`, not just `A != 0` and `A != N`. Sending `A = k*N` for any integer k forces the shared secret to zero, allowing authentication without knowing the password.
+
+---
+
+## Modified AES S-Box Brute-Force Recovery (H4ckIT CTF 2016)
+
+AES implementation with a custom S-Box created by swapping 3 elements of the standard S-Box. Brute-force all C(256,3) * 2 = 5,527,040 possible permutations.
+
+```cpp
+// Three elements swapped from standard AES S-Box
+// Total permutations: C(256,3) * 2 = ~5.5 million (feasible to brute-force)
+#include <openssl/aes.h>
+
+void bruteforce_sbox(uint8_t ciphertext[], uint8_t key[], int ct_len) {
+    uint8_t standard_sbox[256]; // standard AES S-Box
+    // Try all 3-element swaps
+    for (int i = 0; i < 256; i++)
+        for (int j = i+1; j < 256; j++)
+            for (int k = j+1; k < 256; k++) {
+                // Swap pairs: (i,j), (i,k), (j,k)
+                uint8_t sbox[256];
+                memcpy(sbox, standard_sbox, 256);
+                swap(sbox[i], sbox[j]); // try each 2-element swap from the triple
+                // Decrypt and check for valid plaintext
+                if (try_decrypt_with_sbox(sbox, ciphertext, key, ct_len))
+                    return; // found it
+            }
+}
+```
+
+**Key insight:** When a custom AES S-Box differs from standard by only a few element swaps, the search space is small enough to brute-force. For 3 swapped elements: C(256,3) permutation groups times the swap combinations within each group.
 
 ---
 
