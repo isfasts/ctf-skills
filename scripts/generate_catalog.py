@@ -145,15 +145,20 @@ def build_html(skills: list[dict]) -> str:
                 )
             tech_list = f'<ul class="technique-list">{"".join(items)}</ul>'
 
+        repo = _get_repo_url()
+        skill_link = f"{repo}/blob/main/{s['dir_name']}/SKILL.md"
         cards.append(f"""
     <div class="card" style="border-top: 4px solid {color}">
-      <div class="card-header">
-        <span class="icon">{icon}</span>
-        <h2>{html.escape(s["dir_name"])}</h2>
-        <span class="badge" style="background:{color}">\
+      <a class="card-link" href="{skill_link}"
+         target="_blank" rel="noopener noreferrer">
+        <div class="card-header">
+          <span class="icon">{icon}</span>
+          <h2>{html.escape(s["dir_name"])}</h2>
+          <span class="badge" style="background:{color}">\
 {tech_count} file{"s" if tech_count != 1 else ""}</span>
-      </div>
-      <p class="description">{desc}</p>
+        </div>
+        <p class="description">{desc}</p>
+      </a>
       {tech_list}
     </div>""")
 
@@ -163,6 +168,13 @@ def build_html(skills: list[dict]) -> str:
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>CTF Skills Catalog</title>
+  <!-- Google Tag Manager -->
+  <script>(function(w,d,s,l,i){{w[l]=w[l]||[];w[l].push({{'gtm.start':
+  new Date().getTime(),event:'gtm.js'}});var f=d.getElementsByTagName(s)[0],
+  j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+  'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+  }})(window,document,'script','dataLayer','GTM-M7N68WTX');</script>
+  <!-- End Google Tag Manager -->
   <style>
     :root {{
       --bg: #0d1117;
@@ -234,6 +246,12 @@ def build_html(skills: list[dict]) -> str:
       transition: transform 0.15s ease;
     }}
     .card:hover {{ transform: translateY(-2px); }}
+    .card-link {{
+      display: block;
+      color: inherit;
+      text-decoration: none;
+    }}
+    .card-link:hover h2 {{ color: var(--link); }}
     .card-header {{
       display: flex;
       align-items: center;
@@ -289,6 +307,10 @@ def build_html(skills: list[dict]) -> str:
   </style>
 </head>
 <body>
+  <!-- Google Tag Manager (noscript) -->
+  <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-M7N68WTX"
+  height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+  <!-- End Google Tag Manager (noscript) -->
   <div class="container">
     <header>
       <h1>CTF Skills Catalog</h1>
